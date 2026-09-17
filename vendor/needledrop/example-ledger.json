@@ -1,0 +1,47 @@
+{
+  "format": "cwi-needledrop/v1",
+  "ledger": {
+    "chain": {
+      "algorithm": "sha256",
+      "genesis": "GENESIS",
+      "head": "e6e41e415e111b96bddc2864262d5b2d05f1f2d69b1258ac375067b1d92def1e"
+    },
+    "honesty_statement": "EXAMPLE ledger shipped with cwi-mcp-server so strangers can verify the needledrop_verify tool cold. These entries are NOT real CWI placements — they are demos."
+  },
+  "placements": [
+    {
+      "track": "EXAMPLE — not a real placement",
+      "production": "Example Film (demo)",
+      "scene": "opening titles",
+      "timestamp": "2026-09-17T00:00",
+      "terms": {
+        "fee_tier": "undisclosed",
+        "territory": "undisclosed",
+        "term_length": "undisclosed"
+      },
+      "status": "claimed",
+      "entered_by": "cwi-mcp-server-packager",
+      "placement_id": "ND-2026-001",
+      "entry_timestamp": "2026-09-17T11:27:59Z",
+      "prev_hash": "GENESIS",
+      "entry_hash": "ba2efe7d662219449af26f68025f9db78f97d06876d661bc5042f4702ee26273"
+    },
+    {
+      "track": "EXAMPLE 2 — not a real placement",
+      "production": "Example Series (demo)",
+      "scene": "closing credits",
+      "timestamp": "2026-09-17T00:00",
+      "terms": {
+        "fee_tier": "undisclosed",
+        "territory": "undisclosed",
+        "term_length": "undisclosed"
+      },
+      "status": "pending",
+      "entered_by": "cwi-mcp-server-packager",
+      "placement_id": "ND-2026-002",
+      "entry_timestamp": "2026-09-17T11:27:59Z",
+      "prev_hash": "ba2efe7d662219449af26f68025f9db78f97d06876d661bc5042f4702ee26273",
+      "entry_hash": "e6e41e415e111b96bddc2864262d5b2d05f1f2d69b1258ac375067b1d92def1e"
+    }
+  ]
+}

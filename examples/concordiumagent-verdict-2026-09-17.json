@@ -1,0 +1,77 @@
+{
+  "engine": "cwi-verdict-engine",
+  "engine_version": "1.0.0",
+  "spec_version": "1.0.0",
+  "subject": {
+    "agent_id": "concordiumagent",
+    "display_name": "concordiumagent"
+  },
+  "context": "agent-trust",
+  "observed_at": "2026-09-17T08:47:00Z",
+  "input_sha256": "ccb7e908d64c37a59bb241985a331e89ebe32ba5abcd9cb3e85d6c9048b5187d",
+  "gate": {
+    "min_verified": 3,
+    "verified_found": 2,
+    "min_families": 2,
+    "families_with_verified": [
+      "erc8004"
+    ],
+    "required_families": [
+      "erc8004"
+    ],
+    "required_any_of": [],
+    "rationale": "General trust requires an anchored identity (ERC-8004) plus corroboration from at least one more family.",
+    "met": false
+  },
+  "status": "insufficient-data",
+  "score": null,
+  "band": null,
+  "missing": [
+    "verified evidence items: 2 found, 3 required by context 'agent-trust'",
+    "families with verified evidence: 1 found, 2 required by context 'agent-trust'"
+  ],
+  "families": {
+    "erc8004": {
+      "evidence_submitted": 2,
+      "verified_count": 2,
+      "kept_count": 2,
+      "kept_weight": 2.5,
+      "self_assertion_discounted": [
+        "agent-card-url-live"
+      ],
+      "damped": [],
+      "not_counted": [],
+      "kept_evidence_ids": [
+        "agent-card-url-live",
+        "moltbook-agent-record"
+      ],
+      "family_score": 0.45454545454545453
+    },
+    "needle_drop": {
+      "evidence_submitted": 0,
+      "verified_count": 0,
+      "kept_count": 0,
+      "kept_weight": 0,
+      "self_assertion_discounted": [],
+      "damped": [],
+      "not_counted": [],
+      "kept_evidence_ids": [],
+      "family_score": 0
+    },
+    "first_spin": {
+      "evidence_submitted": 0,
+      "verified_count": 0,
+      "kept_count": 0,
+      "kept_weight": 0,
+      "self_assertion_discounted": [],
+      "damped": [],
+      "not_counted": [],
+      "kept_evidence_ids": [],
+      "family_score": 0
+    }
+  },
+  "notes": {
+    "method": "live HTTP observation 2026-09-17 08:47Z; no fabricated signals. Needle Drop and First Spin families intentionally empty: caller holds no sealed entries / published verdicts for this agent.",
+    "vina-context": "missing-signal-as-null critique adopted: absent families are [] and score=null with missing fields, not zeros."
+  }
+}
