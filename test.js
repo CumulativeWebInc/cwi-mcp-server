@@ -110,13 +110,13 @@ async function main() {
   const list = await send('tools/list', {});
   const names = (list.result && list.result.tools || []).map((t) => t.name).sort();
   const expected = [
+    'clearance_window_verify',
     'ledger_agents',
     'ledger_state_get',
     'ledger_state_version',
     'ledger_task_get',
     'ledger_tasks',
     'needledrop_verify',
-    'sync_shelf_match',
     'trust_verdict',
   ].sort();
   check('tools/list exposes exactly 8 tools', JSON.stringify(names) === JSON.stringify(expected), names.join(','));
@@ -124,24 +124,6 @@ async function main() {
     'every tool has name, description, inputSchema',
     (list.result.tools || []).every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object')
   );
-
-  console.log('sync shelf:');
-  const shelf = await send('tools/call', { name: 'sync_shelf_match', arguments: { moods: ['dark','hypnotic'], energy: 'high', bpm_min: 80, bpm_max: 110 } });
-  const shelfP = toolPayload(shelf.result);
-  check('sync_shelf_match: disclaimer present and denies legal clearance',
-    typeof shelfP.disclaimer === 'string' && shelfP.disclaimer.includes('NOT a legal clearance determination'),
-    JSON.stringify(shelfP.disclaimer).slice(0, 100));
-  check('sync_shelf_match: top match is trk_lp_phantasm',
-    Array.isArray(shelfP.matches) && shelfP.matches[0] && shelfP.matches[0].track_id === 'trk_lp_phantasm',
-    JSON.stringify((shelfP.matches||[])[0]||{}).slice(0, 160));
-  check('sync_shelf_match: every match amber, no terms anywhere',
-    shelfP.matches.every((m) => m.clearance_status === 'amber') && !/terms|fee|territory/i.test(JSON.stringify(shelfP.matches)),
-    JSON.stringify(shelfP.matches).slice(0, 200));
-  const shelfEmpty = await send('tools/call', { name: 'sync_shelf_match', arguments: { moods: ['hopeful','warm'], energy: 'medium', bpm_min: 90, bpm_max: 120 } });
-  const shelfEmptyP = toolPayload(shelfEmpty.result);
-  check('sync_shelf_match: no-match brief returns empty honestly',
-    shelfEmptyP.matches.length === 0 && !!shelfEmptyP.no_match_note,
-    JSON.stringify(shelfEmptyP).slice(0, 160));
 
   console.log('ledger reads:');
   const ver = await send('tools/call', { name: 'ledger_state_version', arguments: {} });
@@ -244,6 +226,39 @@ async function main() {
 
   const ndMissing = await send('tools/call', { name: 'needledrop_verify', arguments: { file: '/tmp/does-not-exist-nd.json' } });
   check('needledrop: missing file -> isError', ndMissing.result && ndMissing.result.isError === true);
+
+  console.log('clearance_window_verify:');
+  const exampleGrant = JSON.parse(readFileSync(join(HERE, 'vendor', 'clearance-window', 'example-grant.json'), 'utf8'));
+  const cw = await send('tools/call', {
+    name: 'clearance_window_verify',
+    arguments: { grant: exampleGrant, at: '2026-09-17T19:00:00Z', required_scope: 'gear.signal-boy.play-catalog' },
+  });
+  const cwP = toolPayload(cw.result);
+  check('clearance: example grant verifies VALID', cwP.verdict === 'VALID', JSON.stringify(cwP).slice(0, 200));
+  check('clearance: reason + leeway reported', typeof cwP.reason === 'string' && cwP.leeway_seconds === 60);
+
+  const cwExp = await send('tools/call', {
+    name: 'clearance_window_verify',
+    arguments: { grant: exampleGrant, at: '2026-09-18T12:00:01Z', leeway_seconds: 0 },
+  });
+  check('clearance: past window -> EXPIRED', toolPayload(cwExp.result).verdict === 'EXPIRED');
+
+  const cwScope = await send('tools/call', {
+    name: 'clearance_window_verify',
+    arguments: { grant: exampleGrant, at: '2026-09-17T19:00:00Z', required_scope: 'gear.everything.admin' },
+  });
+  check('clearance: ungranted scope -> SCOPE_MISMATCH', toolPayload(cwScope.result).verdict === 'SCOPE_MISMATCH');
+
+  const tamperedGrant = { ...exampleGrant, scope: [...exampleGrant.scope, 'gear.everything.admin'] };
+  const cwBad = await send('tools/call', {
+    name: 'clearance_window_verify',
+    arguments: { grant: tamperedGrant, at: '2026-09-17T19:00:00Z' },
+  });
+  const cwBadP = toolPayload(cwBad.result);
+  check('clearance: tampered scope -> INVALID', cwBadP.verdict === 'INVALID', JSON.stringify(cwBadP).slice(0, 200));
+
+  const cwNoGrant = await send('tools/call', { name: 'clearance_window_verify', arguments: {} });
+  check('clearance: missing grant -> isError', cwNoGrant.result && cwNoGrant.result.isError === true);
 
   console.log('error handling:');
   const unknownMethod = await send('nope/method', {});

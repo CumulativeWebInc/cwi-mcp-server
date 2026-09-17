@@ -9,11 +9,12 @@
  * ledger path goes through the canonical CLI's read-only exports
  * (readState). No presence heartbeats, no task creation, no state mutation,
  * no signing. Trust-verdict runs the vendored engine locally on
- * caller-supplied evidence; needle-drop exposes verify() only.
+ * caller-supplied evidence; needle-drop exposes verify() only;
+ * clearance-window exposes verify() only (no issuance).
  *
  * Dependencies: none (node stdlib only). Python3 is shell-out'd for the
- * vendored trust-verdict engine and the canonical NEEDLE DROP ledger.py
- * (both stdlib-only).
+ * vendored trust-verdict engine, the canonical NEEDLE DROP ledger.py,
+ * and the Clearance Window expiry engine (all stdlib-only).
  */
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -30,53 +31,14 @@ const NEEDLE_DROP_DIR = join(HERE, 'vendor', 'needledrop');
 const NEEDLE_DROP_LEDGER_PY = join(NEEDLE_DROP_DIR, 'ledger.py');
 const NEEDLE_DROP_LEDGER = join(NEEDLE_DROP_DIR, 'example-ledger.json');
 const VERDICT_ENGINE = join(HERE, 'vendor/cwi-verdict-engine-v1.0.0/engine.py');
+// Vendored: the Clearance Window expiry engine + schema + example grant ship
+// with the repo, so clearance_window_verify works on a stranger's machine
+// with zero setup.
+const CLEARANCE_ENGINE = join(HERE, 'vendor', 'clearance-window', 'expiry.py');
 
 const SERVER_NAME = 'cwi-mcp-server';
 const SERVER_VERSION = '0.3.0';
 const PROTOCOL_VERSION = '2024-11-05';
-
-
-// ---------------------------------------------------------------- sync shelf
-const SYNC_SHELF_URL = 'https://cumulativewebinc.github.io/cwi-learn/sync-shelf/';
-const SYNC_SHELF_THRESHOLD = 0.40;
-const SYNC_SHELF_DISCLAIMER =
-  "Clearance status (green/amber/red) describes CWI's internal readiness " +
-  "posture ONLY. It is NOT a legal clearance determination: CWI does not " +
-  "infer or assert rights, splits, ownership, or legal clearances. " +
-  "Status defaults to amber unless stated otherwise.";
-
-function syncShelfJaccard(a, b) {
-  const sa = new Set(a || []), sb = new Set(b || []);
-  const union = new Set([...sa, ...sb]);
-  if (!union.size) return 0;
-  let n = 0;
-  for (const x of sa) if (sb.has(x)) n++;
-  return n / union.size;
-}
-
-function syncShelfEnergyScore(te, be) {
-  if (te === be) return 1;
-  const order = { low: 0, medium: 1, high: 2 };
-  return Math.abs((order[te] ?? 1) - (order[be] ?? 1)) === 1 ? 0.5 : 0;
-}
-
-function syncShelfScore(track, brief) {
-  const moods = track.moods || [];
-  const sMood = syncShelfJaccard(moods, brief.moods || []);
-  const sEnergy = syncShelfEnergyScore(track.energy, brief.energy);
-  const bpm = track.bpm_estimate;
-  let sBpm = 0;
-  if (bpm != null && brief.bpm_min != null && brief.bpm_max != null)
-    sBpm = bpm >= brief.bpm_min && bpm <= brief.bpm_max ? 1 : 0;
-  const score = 0.45 * sMood + 0.20 * sEnergy + 0.25 * sBpm;
-  const matchedOn = [];
-  if (sMood > 0)
-    matchedOn.push('moods: ' + [...new Set(moods)]
-      .filter((m) => (brief.moods || []).includes(m)).sort().join(', '));
-  if (sEnergy === 1) matchedOn.push('energy: ' + track.energy);
-  if (sBpm === 1) matchedOn.push('bpm: ' + bpm + ' in range ' + brief.bpm_min + '-' + brief.bpm_max);
-  return { score: Math.round(score * 1e4) / 1e4, matchedOn };
-}
 
 // ---------------------------------------------------------------- ledger ----
 // The Gear Ledger is read two ways:
@@ -98,7 +60,7 @@ function fetchText(url, redirects = 3) {
       new Promise((resolve, reject) => {
         const req = get(
           url,
-          { headers: { 'User-Agent': 'cwi-mcp-server/0.3.0' } },
+          { headers: { 'User-Agent': 'cwi-mcp-server/0.2.0' } },
           (res) => {
             if (
               res.statusCode >= 300 &&
@@ -367,63 +329,68 @@ const TOOLS = [
       };
     },
   },
-
-  // --------------------------------------------------------- sync shelf ----
-  // The Sync Shelf (cwi-learn/sync-shelf): open machine-readable sync-brief
-  // board. This tool scores the public shelf catalog against a caller-
-  // supplied brief and returns top tracks with clearance STATUS only
-  // (green/amber/red = CWI internal readiness posture, NOT a legal
-  // clearance determination). No terms are ever published or returned.
   {
-    name: 'sync_shelf_match',
+    name: 'clearance_window_verify',
     description:
-      'Read-only: score the CWI sync catalog against a sync brief and return ' +
-      'the top matching tracks with clearance status. Brief args: moods[] ' +
-      '(required), energy (low|medium|high), bpm_min/bpm_max, lyrical_themes[]. ' +
-      'Each match carries matched_on rationale and clearance_status ' +
-      '(green|amber|red — CWI internal readiness posture ONLY, NOT a legal ' +
-      'clearance determination; amber is the default). No terms, fees, ' +
-      'territory, or splits are published or returned. Reads the public ' +
-      'CWI shelf JSON (no auth, read-only).',
+      'Verify-only: evaluate a Clearance Window time-boxed usage grant with the vendored expiry engine (pure function: grant JSON + reference time -> verdict). Returns one verdict with a machine-readable reason: VALID, EXPIRED, NOT_YET_VALID, REVOKED (beats expiry), SCOPE_MISMATCH, or INVALID (tampered/malformed). expires_at is EXCLUSIVE: at == expires_at -> EXPIRED. No issuance, no revocation, no state — verification only. Grants are coordination records between agents, not legal instruments.',
     inputSchema: {
       type: 'object',
       properties: {
-        moods: { type: 'array', items: { type: 'string' }, description: 'Desired moods, e.g. ["dark","hypnotic"]' },
-        energy: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Desired energy band' },
-        bpm_min: { type: 'integer', description: 'Tempo floor' },
-        bpm_max: { type: 'integer', description: 'Tempo ceiling' },
-        lyrical_themes: { type: 'array', items: { type: 'string' }, description: 'Desired lyrical themes' },
+        grant: {
+          type: 'object',
+          description: 'Grant document per the Clearance Window grant-schema.json (grant_id, grantor_urn, grantee_urn, scope[], issued_at, expires_at, terms_ref, status, hash).',
+        },
+        at: {
+          type: 'string',
+          description: 'Reference time (ISO-8601) supplied by the VERIFIER. Omit for now.',
+        },
+        required_scope: {
+          type: 'string',
+          description: 'A single scope the caller needs; must sit inside the grant scope (attenuation only).',
+        },
+        leeway_seconds: {
+          type: 'number',
+          description: 'Explicit clock-skew leeway in seconds. Default 60.',
+        },
       },
-      required: ['moods'],
+      required: ['grant'],
       additionalProperties: false,
     },
     handler: async (args) => {
-      const shelf = JSON.parse(await fetchText(SYNC_SHELF_URL + 'catalog-tracks.json'));
-      const brief = {
-        moods: args.moods, energy: args.energy || 'high',
-        bpm_min: args.bpm_min ?? null, bpm_max: args.bpm_max ?? null,
-      };
-      const scored = [];
-      for (const t of shelf.tracks) {
-        const r = syncShelfScore(t, brief);
-        if (r.score >= SYNC_SHELF_THRESHOLD)
-          scored.push({
-            track_id: t.id, title: t.title, artist: t.artist, score: r.score,
-            matched_on: r.matchedOn,
-            clearance_status: t.clearance_status || 'amber',
-            status_note: 'Amber default — internal readiness under review; not a legal clearance.',
-          });
+      if (!existsSync(CLEARANCE_ENGINE)) {
+        throw new Error(`vendored clearance engine not found at ${CLEARANCE_ENGINE}`);
       }
-      scored.sort((a, b) => b.score - a.score);
-      return {
-        disclaimer: SYNC_SHELF_DISCLAIMER,
-        matches: scored.slice(0, 3),
-        no_match_note: scored.length ? undefined :
-          'No catalog tracks scored above the 0.40 threshold — no forced fit was made.',
-      };
+      if (!args.grant || typeof args.grant !== 'object' || Array.isArray(args.grant)) {
+        const err = new Error('grant must be a JSON object per grant-schema.json');
+        err.code = 'clearance.bad_grant';
+        throw err;
+      }
+      const r = spawnSync(
+        'python3',
+        [CLEARANCE_ENGINE],
+        {
+          input: JSON.stringify({
+            grant: args.grant,
+            at: args.at ?? null,
+            required_scope: args.required_scope ?? null,
+            leeway_seconds: args.leeway_seconds ?? 60,
+          }),
+          encoding: 'utf8',
+          timeout: 30000,
+        }
+      );
+      if (r.error) throw new Error(`clearance engine failed to run: ${r.error.message}`);
+      let parsed;
+      try {
+        parsed = JSON.parse(r.stdout);
+      } catch {
+        throw new Error(`clearance engine returned non-JSON output: ${(r.stdout || '').slice(0, 300)}`);
+      }
+      return parsed; // {verdict, reason, checked_at, leeway_seconds}
     },
   },
 ];
+
 export { TOOLS, SERVER_NAME, SERVER_VERSION, PROTOCOL_VERSION };
 
 // --------------------------------------------------------------- JSON-RPC ---

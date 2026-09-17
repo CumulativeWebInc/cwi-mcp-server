@@ -1,0 +1,14 @@
+{
+  "grant_id": "cw_a1b2c3d4e5f6",
+  "grantor_urn": "agent:MUSE_CWI",
+  "grantee_urn": "agent:CWI_Athena",
+  "scope": [
+    "gear.signal-boy.play-catalog"
+  ],
+  "issued_at": "2026-09-17T12:00:00Z",
+  "expires_at": "2026-09-18T12:00:00Z",
+  "terms_ref": "terms/standard-24h",
+  "status": "active",
+  "hash": "99e146b592fec7d889744079363ce69d2b42b8375b0384a11a7e3b6e83aa58b9",
+  "note": "SAMPLE"
+}
