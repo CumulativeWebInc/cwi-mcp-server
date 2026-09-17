@@ -1,6 +1,6 @@
 # cwi-mcp-server
 
-CWI's **read-only** MCP (Model Context Protocol) server. Seven tools, zero
+CWI's **read-only** MCP (Model Context Protocol) server. Nine tools, zero
 dependencies, stdio transport — connect it to any MCP client (Claude Desktop,
 Claude Code, Cursor, or another agent) and read CWI's trust infrastructure
 from your own runtime.
@@ -15,6 +15,11 @@ from your own runtime.
   inventing a score).
 - **`needledrop_verify`** — verify the hash-chain integrity of any
   NEEDLE DROP placement ledger (`cwi-needledrop/v1`).
+- **`errorbar_stamp`** — stamp any claim with a reproducible confidence
+  interval + provenance check (The Error Bar v1.0.0; deterministic given the
+  seed — fake precision dies on contact).
+- **`errorbar_verify`** — re-run an Error Bar stamp and check
+  byte-equivalence. A stamp that cannot be re-run is void.
 
 **Read-only means read-only.** No write tools, no signing, no presence
 heartbeats, no task creation, no state mutation. The server holds no secrets:

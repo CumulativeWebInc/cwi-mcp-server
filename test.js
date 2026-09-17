@@ -110,7 +110,8 @@ async function main() {
   const list = await send('tools/list', {});
   const names = (list.result && list.result.tools || []).map((t) => t.name).sort();
   const expected = [
-    'clearance_window_verify',
+    'errorbar_stamp',
+    'errorbar_verify',
     'ledger_agents',
     'ledger_state_get',
     'ledger_state_version',
@@ -119,7 +120,7 @@ async function main() {
     'needledrop_verify',
     'trust_verdict',
   ].sort();
-  check('tools/list exposes exactly 8 tools', JSON.stringify(names) === JSON.stringify(expected), names.join(','));
+  check('tools/list exposes exactly 9 tools', JSON.stringify(names) === JSON.stringify(expected), names.join(','));
   check(
     'every tool has name, description, inputSchema',
     (list.result.tools || []).every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object')
@@ -227,38 +228,85 @@ async function main() {
   const ndMissing = await send('tools/call', { name: 'needledrop_verify', arguments: { file: '/tmp/does-not-exist-nd.json' } });
   check('needledrop: missing file -> isError', ndMissing.result && ndMissing.result.isError === true);
 
-  console.log('clearance_window_verify:');
-  const exampleGrant = JSON.parse(readFileSync(join(HERE, 'vendor', 'clearance-window', 'example-grant.json'), 'utf8'));
-  const cw = await send('tools/call', {
-    name: 'clearance_window_verify',
-    arguments: { grant: exampleGrant, at: '2026-09-17T19:00:00Z', required_scope: 'gear.signal-boy.play-catalog' },
-  });
-  const cwP = toolPayload(cw.result);
-  check('clearance: example grant verifies VALID', cwP.verdict === 'VALID', JSON.stringify(cwP).slice(0, 200));
-  check('clearance: reason + leeway reported', typeof cwP.reason === 'string' && cwP.leeway_seconds === 60);
+  console.log('errorbar_stamp / errorbar_verify:');
+  const ebClaim = {
+    claim: 'Zooted Zone has about 307,000 lifetime Spotify plays',
+    point_estimate: 307000,
+    unit: 'lifetime Spotify plays',
+    claim_type: 'stat',
+    evidence_tier: 'corroborated',
+    sources: [{ kind: 'internal-record', ref: 'CWI catalog notes 2026-09-14' }],
+    observed_at: '2026-09-14T00:00:00Z',
+    label: 'SAMPLE',
+  };
+  const stamp1 = await send('tools/call', { name: 'errorbar_stamp', arguments: { claim: ebClaim, seed: 20260917 } });
+  const stamp1P = toolPayload(stamp1.result);
+  check(
+    'errorbar_stamp: interval sane (low <= point <= high)',
+    stamp1P.interval && stamp1P.interval.low <= 307000 && 307000 <= stamp1P.interval.high,
+    JSON.stringify(stamp1P.interval)
+  );
+  check(
+    'errorbar_stamp: carries method_id, seed, input_sha256, reproducibility',
+    stamp1P.interval.method_id === 'eb-mc-normal/1.0' && stamp1P.seed === 20260917 &&
+      typeof stamp1P.input_sha256 === 'string' && stamp1P.input_sha256.length === 64 &&
+      typeof stamp1P.reproducibility === 'string' && stamp1P.reproducibility.includes('Re-run'),
+    stamp1P.interval && stamp1P.interval.method_id
+  );
+  check('errorbar_stamp: provenance pass', stamp1P.provenance && stamp1P.provenance.status === 'pass');
 
-  const cwExp = await send('tools/call', {
-    name: 'clearance_window_verify',
-    arguments: { grant: exampleGrant, at: '2026-09-18T12:00:01Z', leeway_seconds: 0 },
-  });
-  check('clearance: past window -> EXPIRED', toolPayload(cwExp.result).verdict === 'EXPIRED');
+  const stamp2 = await send('tools/call', { name: 'errorbar_stamp', arguments: { claim: ebClaim, seed: 20260917 } });
+  // stamped_at is run metadata by design; it appears in the stamped_at field AND
+  // inside the reproducibility re-run command, so normalize both before comparing.
+  const normTs = (p) => { const { output_sha256, ...rest } = p; return JSON.stringify(rest).replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^"]*/g, '<TS>'); };
+  check(
+    'errorbar_stamp: deterministic (same claim+seed -> identical payload sans run timestamps)',
+    normTs(toolPayload(stamp2.result)) === normTs(stamp1P)
+  );
 
-  const cwScope = await send('tools/call', {
-    name: 'clearance_window_verify',
-    arguments: { grant: exampleGrant, at: '2026-09-17T19:00:00Z', required_scope: 'gear.everything.admin' },
+  const thin = await send('tools/call', {
+    name: 'errorbar_stamp',
+    arguments: { claim: { ...ebClaim, evidence_tier: 'corroborated', sources: [] }, seed: 5 },
   });
-  check('clearance: ungranted scope -> SCOPE_MISMATCH', toolPayload(cwScope.result).verdict === 'SCOPE_MISMATCH');
+  const thinP = toolPayload(thin.result);
+  check(
+    'errorbar_stamp: missing sources -> flagged, never passed',
+    thinP.provenance && thinP.provenance.status === 'flagged',
+    thinP.provenance && thinP.provenance.status
+  );
 
-  const tamperedGrant = { ...exampleGrant, scope: [...exampleGrant.scope, 'gear.everything.admin'] };
-  const cwBad = await send('tools/call', {
-    name: 'clearance_window_verify',
-    arguments: { grant: tamperedGrant, at: '2026-09-17T19:00:00Z' },
+  const nodata = await send('tools/call', {
+    name: 'errorbar_stamp',
+    arguments: { claim: { ...ebClaim, evidence_tier: 'none', sources: [] }, seed: 5 },
   });
-  const cwBadP = toolPayload(cwBad.result);
-  check('clearance: tampered scope -> INVALID', cwBadP.verdict === 'INVALID', JSON.stringify(cwBadP).slice(0, 200));
+  const nodataP = toolPayload(nodata.result);
+  check(
+    'errorbar_stamp: tier none -> insufficient-data, no interval',
+    nodataP.provenance && nodataP.provenance.status === 'insufficient-data' && nodataP.interval === null
+  );
 
-  const cwNoGrant = await send('tools/call', { name: 'clearance_window_verify', arguments: {} });
-  check('clearance: missing grant -> isError', cwNoGrant.result && cwNoGrant.result.isError === true);
+  const verify1 = await send('tools/call', {
+    name: 'errorbar_verify', arguments: { claim: ebClaim, stamped: stamp1P },
+  });
+  const verify1P = toolPayload(verify1.result);
+  check('errorbar_verify: honest stamp reproduces', verify1P.reproduced === true, JSON.stringify(verify1P));
+
+  const ebTampered = JSON.parse(JSON.stringify(stamp1P));
+  ebTampered.interval.high = ebTampered.interval.high + 1;
+  const verify2 = await send('tools/call', {
+    name: 'errorbar_verify', arguments: { claim: ebClaim, stamped: ebTampered },
+  });
+  const verify2P = toolPayload(verify2.result);
+  check(
+    'errorbar_verify: tampered stamp does NOT reproduce',
+    verify2P.reproduced === false && (verify2P.differing_fields || []).includes('interval'),
+    JSON.stringify(verify2P)
+  );
+
+  const badClaim = await send('tools/call', {
+    name: 'errorbar_stamp', arguments: { claim: { claim: 'x' }, seed: 1 },
+  });
+  check('errorbar_stamp: invalid claim -> isError', badClaim.result && badClaim.result.isError === true);
 
   console.log('error handling:');
   const unknownMethod = await send('nope/method', {});

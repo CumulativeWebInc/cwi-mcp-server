@@ -9,19 +9,18 @@
  * ledger path goes through the canonical CLI's read-only exports
  * (readState). No presence heartbeats, no task creation, no state mutation,
  * no signing. Trust-verdict runs the vendored engine locally on
- * caller-supplied evidence; needle-drop exposes verify() only;
- * clearance-window exposes verify() only (no issuance).
+ * caller-supplied evidence; needle-drop exposes verify() only.
  *
  * Dependencies: none (node stdlib only). Python3 is shell-out'd for the
- * vendored trust-verdict engine, the canonical NEEDLE DROP ledger.py,
- * and the Clearance Window expiry engine (all stdlib-only).
+ * vendored trust-verdict engine and the canonical NEEDLE DROP ledger.py
+ * (both stdlib-only).
  */
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { realpathSync, existsSync } from 'node:fs';
+import { realpathSync, existsSync, writeFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LEDGER_CLI = join(homedir(), 'workspace/gear-ledger/cli/ledger.js');
@@ -31,10 +30,7 @@ const NEEDLE_DROP_DIR = join(HERE, 'vendor', 'needledrop');
 const NEEDLE_DROP_LEDGER_PY = join(NEEDLE_DROP_DIR, 'ledger.py');
 const NEEDLE_DROP_LEDGER = join(NEEDLE_DROP_DIR, 'example-ledger.json');
 const VERDICT_ENGINE = join(HERE, 'vendor/cwi-verdict-engine-v1.0.0/engine.py');
-// Vendored: the Clearance Window expiry engine + schema + example grant ship
-// with the repo, so clearance_window_verify works on a stranger's machine
-// with zero setup.
-const CLEARANCE_ENGINE = join(HERE, 'vendor', 'clearance-window', 'expiry.py');
+const ERRORBAR_PY = join(HERE, 'vendor', 'error-bar', 'errorbar.py');
 
 const SERVER_NAME = 'cwi-mcp-server';
 const SERVER_VERSION = '0.3.0';
@@ -60,7 +56,7 @@ function fetchText(url, redirects = 3) {
       new Promise((resolve, reject) => {
         const req = get(
           url,
-          { headers: { 'User-Agent': 'cwi-mcp-server/0.2.0' } },
+          { headers: { 'User-Agent': 'cwi-mcp-server/0.3.0' } },
           (res) => {
             if (
               res.statusCode >= 300 &&
@@ -330,63 +326,105 @@ const TOOLS = [
     },
   },
   {
-    name: 'clearance_window_verify',
+    name: 'errorbar_stamp',
     description:
-      'Verify-only: evaluate a Clearance Window time-boxed usage grant with the vendored expiry engine (pure function: grant JSON + reference time -> verdict). Returns one verdict with a machine-readable reason: VALID, EXPIRED, NOT_YET_VALID, REVOKED (beats expiry), SCOPE_MISMATCH, or INVALID (tampered/malformed). expires_at is EXCLUSIVE: at == expires_at -> EXPIRED. No issuance, no revocation, no state — verification only. Grants are coordination records between agents, not legal instruments.',
+      'Stamp a claim with a reproducible confidence interval + provenance check (The Error Bar v1.0.0). Pass `claim` as the claim object {claim, point_estimate, unit, claim_type: stat|forecast|proportion, evidence_tier: verified|corroborated|single-source|anecdotal|none, sources:[], observed_at, horizon_days?, sample_n?, seed?, label?} and optional `seed` (default 1337). Deterministic: same claim+seed -> byte-identical output. Provenance status is pass|flagged|insufficient-data; missing sources is flagged, never passed; thin evidence yields wide intervals or insufficient-data. Every output carries method_id, seed, input_sha256 and a reproducibility statement — an output that cannot be re-run is void.',
     inputSchema: {
       type: 'object',
       properties: {
-        grant: {
+        claim: {
           type: 'object',
-          description: 'Grant document per the Clearance Window grant-schema.json (grant_id, grantor_urn, grantee_urn, scope[], issued_at, expires_at, terms_ref, status, hash).',
+          description: 'Claim document per the error-bar schema.',
         },
-        at: {
-          type: 'string',
-          description: 'Reference time (ISO-8601) supplied by the VERIFIER. Omit for now.',
-        },
-        required_scope: {
-          type: 'string',
-          description: 'A single scope the caller needs; must sit inside the grant scope (attenuation only).',
-        },
-        leeway_seconds: {
-          type: 'number',
-          description: 'Explicit clock-skew leeway in seconds. Default 60.',
+        seed: {
+          type: 'integer',
+          description: 'Deterministic seed (default 1337).',
         },
       },
-      required: ['grant'],
+      required: ['claim'],
       additionalProperties: false,
     },
     handler: async (args) => {
-      if (!existsSync(CLEARANCE_ENGINE)) {
-        throw new Error(`vendored clearance engine not found at ${CLEARANCE_ENGINE}`);
+      if (!existsSync(ERRORBAR_PY)) {
+        throw new Error(`vendored error-bar tool not found at ${ERRORBAR_PY}`);
       }
-      if (!args.grant || typeof args.grant !== 'object' || Array.isArray(args.grant)) {
-        const err = new Error('grant must be a JSON object per grant-schema.json');
-        err.code = 'clearance.bad_grant';
+      if (!args.claim || typeof args.claim !== 'object' || Array.isArray(args.claim)) {
+        const err = new Error('claim must be a JSON object per the error-bar schema');
+        err.code = 'errorbar.bad_input';
         throw err;
       }
-      const r = spawnSync(
-        'python3',
-        [CLEARANCE_ENGINE],
-        {
-          input: JSON.stringify({
-            grant: args.grant,
-            at: args.at ?? null,
-            required_scope: args.required_scope ?? null,
-            leeway_seconds: args.leeway_seconds ?? 60,
-          }),
-          encoding: 'utf8',
-          timeout: 30000,
-        }
-      );
-      if (r.error) throw new Error(`clearance engine failed to run: ${r.error.message}`);
+      const seed = args.seed !== undefined ? args.seed : 1337;
+      if (!Number.isInteger(seed)) {
+        const err = new Error('seed must be an integer');
+        err.code = 'errorbar.bad_seed';
+        throw err;
+      }
+      const r = spawnSync('python3', [ERRORBAR_PY, 'stamp', '--in', '-', '--seed', String(seed)], {
+        input: JSON.stringify(args.claim),
+        encoding: 'utf8',
+        timeout: 30000,
+      });
+      if (r.error) throw new Error(`error-bar stamp failed to run: ${r.error.message}`);
+      if (r.status !== 0) {
+        const err = new Error(`error-bar stamp rejected the claim: ${(r.stderr || '').trim().slice(0, 300)}`);
+        err.code = 'errorbar.invalid_claim';
+        throw err;
+      }
       let parsed;
       try {
         parsed = JSON.parse(r.stdout);
       } catch {
-        throw new Error(`clearance engine returned non-JSON output: ${(r.stdout || '').slice(0, 300)}`);
+        throw new Error(`error-bar returned non-JSON output: ${(r.stdout || '').slice(0, 300)}`);
       }
-      return parsed; // {verdict, reason, checked_at, leeway_seconds}
+      return parsed;
+    },
+  },
+  {
+    name: 'errorbar_verify',
+    description:
+      'Re-run an Error Bar stamp and check byte-equivalence. Pass `claim` (the original claim object) and `stamped` (the stamped output). Returns {reproduced: true|false, ...}. Use this to prove a stamp is reproducible — a stamp that cannot be re-run is void.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        claim: { type: 'object', description: 'Original claim object.' },
+        stamped: { type: 'object', description: 'Stamped output to verify.' },
+      },
+      required: ['claim', 'stamped'],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      if (!existsSync(ERRORBAR_PY)) {
+        throw new Error(`vendored error-bar tool not found at ${ERRORBAR_PY}`);
+      }
+      for (const k of ['claim', 'stamped']) {
+        if (!args[k] || typeof args[k] !== 'object' || Array.isArray(args[k])) {
+          const err = new Error(`${k} must be a JSON object`);
+          err.code = 'errorbar.bad_input';
+          throw err;
+        }
+      }
+      const tag = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const claimFile = join(tmpdir(), `errorbar-claim-${tag}.json`);
+      const stampedFile = join(tmpdir(), `errorbar-stamped-${tag}.json`);
+      writeFileSync(claimFile, JSON.stringify(args.claim));
+      writeFileSync(stampedFile, JSON.stringify(args.stamped));
+      try {
+        const r = spawnSync('python3', [ERRORBAR_PY, 'verify', '--in', claimFile, '--stamped', stampedFile], {
+          encoding: 'utf8',
+          timeout: 30000,
+        });
+        if (r.error) throw new Error(`error-bar verify failed to run: ${r.error.message}`);
+        let parsed;
+        try {
+          parsed = JSON.parse(r.stdout);
+        } catch {
+          throw new Error(`error-bar verify returned non-JSON output: ${(r.stdout || '').slice(0, 300)}`);
+        }
+        return parsed;
+      } finally {
+        try { rmSync(claimFile); } catch {}
+        try { rmSync(stampedFile); } catch {}
+      }
     },
   },
 ];
