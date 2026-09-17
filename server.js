@@ -32,8 +32,51 @@ const NEEDLE_DROP_LEDGER = join(NEEDLE_DROP_DIR, 'example-ledger.json');
 const VERDICT_ENGINE = join(HERE, 'vendor/cwi-verdict-engine-v1.0.0/engine.py');
 
 const SERVER_NAME = 'cwi-mcp-server';
-const SERVER_VERSION = '0.2.0';
+const SERVER_VERSION = '0.3.0';
 const PROTOCOL_VERSION = '2024-11-05';
+
+
+// ---------------------------------------------------------------- sync shelf
+const SYNC_SHELF_URL = 'https://cumulativewebinc.github.io/cwi-learn/sync-shelf/';
+const SYNC_SHELF_THRESHOLD = 0.40;
+const SYNC_SHELF_DISCLAIMER =
+  "Clearance status (green/amber/red) describes CWI's internal readiness " +
+  "posture ONLY. It is NOT a legal clearance determination: CWI does not " +
+  "infer or assert rights, splits, ownership, or legal clearances. " +
+  "Status defaults to amber unless stated otherwise.";
+
+function syncShelfJaccard(a, b) {
+  const sa = new Set(a || []), sb = new Set(b || []);
+  const union = new Set([...sa, ...sb]);
+  if (!union.size) return 0;
+  let n = 0;
+  for (const x of sa) if (sb.has(x)) n++;
+  return n / union.size;
+}
+
+function syncShelfEnergyScore(te, be) {
+  if (te === be) return 1;
+  const order = { low: 0, medium: 1, high: 2 };
+  return Math.abs((order[te] ?? 1) - (order[be] ?? 1)) === 1 ? 0.5 : 0;
+}
+
+function syncShelfScore(track, brief) {
+  const moods = track.moods || [];
+  const sMood = syncShelfJaccard(moods, brief.moods || []);
+  const sEnergy = syncShelfEnergyScore(track.energy, brief.energy);
+  const bpm = track.bpm_estimate;
+  let sBpm = 0;
+  if (bpm != null && brief.bpm_min != null && brief.bpm_max != null)
+    sBpm = bpm >= brief.bpm_min && bpm <= brief.bpm_max ? 1 : 0;
+  const score = 0.45 * sMood + 0.20 * sEnergy + 0.25 * sBpm;
+  const matchedOn = [];
+  if (sMood > 0)
+    matchedOn.push('moods: ' + [...new Set(moods)]
+      .filter((m) => (brief.moods || []).includes(m)).sort().join(', '));
+  if (sEnergy === 1) matchedOn.push('energy: ' + track.energy);
+  if (sBpm === 1) matchedOn.push('bpm: ' + bpm + ' in range ' + brief.bpm_min + '-' + brief.bpm_max);
+  return { score: Math.round(score * 1e4) / 1e4, matchedOn };
+}
 
 // ---------------------------------------------------------------- ledger ----
 // The Gear Ledger is read two ways:
@@ -55,7 +98,7 @@ function fetchText(url, redirects = 3) {
       new Promise((resolve, reject) => {
         const req = get(
           url,
-          { headers: { 'User-Agent': 'cwi-mcp-server/0.2.0' } },
+          { headers: { 'User-Agent': 'cwi-mcp-server/0.3.0' } },
           (res) => {
             if (
               res.statusCode >= 300 &&
@@ -324,8 +367,63 @@ const TOOLS = [
       };
     },
   },
-];
 
+  // --------------------------------------------------------- sync shelf ----
+  // The Sync Shelf (cwi-learn/sync-shelf): open machine-readable sync-brief
+  // board. This tool scores the public shelf catalog against a caller-
+  // supplied brief and returns top tracks with clearance STATUS only
+  // (green/amber/red = CWI internal readiness posture, NOT a legal
+  // clearance determination). No terms are ever published or returned.
+  {
+    name: 'sync_shelf_match',
+    description:
+      'Read-only: score the CWI sync catalog against a sync brief and return ' +
+      'the top matching tracks with clearance status. Brief args: moods[] ' +
+      '(required), energy (low|medium|high), bpm_min/bpm_max, lyrical_themes[]. ' +
+      'Each match carries matched_on rationale and clearance_status ' +
+      '(green|amber|red — CWI internal readiness posture ONLY, NOT a legal ' +
+      'clearance determination; amber is the default). No terms, fees, ' +
+      'territory, or splits are published or returned. Reads the public ' +
+      'CWI shelf JSON (no auth, read-only).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        moods: { type: 'array', items: { type: 'string' }, description: 'Desired moods, e.g. ["dark","hypnotic"]' },
+        energy: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Desired energy band' },
+        bpm_min: { type: 'integer', description: 'Tempo floor' },
+        bpm_max: { type: 'integer', description: 'Tempo ceiling' },
+        lyrical_themes: { type: 'array', items: { type: 'string' }, description: 'Desired lyrical themes' },
+      },
+      required: ['moods'],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const shelf = JSON.parse(await fetchText(SYNC_SHELF_URL + 'catalog-tracks.json'));
+      const brief = {
+        moods: args.moods, energy: args.energy || 'high',
+        bpm_min: args.bpm_min ?? null, bpm_max: args.bpm_max ?? null,
+      };
+      const scored = [];
+      for (const t of shelf.tracks) {
+        const r = syncShelfScore(t, brief);
+        if (r.score >= SYNC_SHELF_THRESHOLD)
+          scored.push({
+            track_id: t.id, title: t.title, artist: t.artist, score: r.score,
+            matched_on: r.matchedOn,
+            clearance_status: t.clearance_status || 'amber',
+            status_note: 'Amber default — internal readiness under review; not a legal clearance.',
+          });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      return {
+        disclaimer: SYNC_SHELF_DISCLAIMER,
+        matches: scored.slice(0, 3),
+        no_match_note: scored.length ? undefined :
+          'No catalog tracks scored above the 0.40 threshold — no forced fit was made.',
+      };
+    },
+  },
+];
 export { TOOLS, SERVER_NAME, SERVER_VERSION, PROTOCOL_VERSION };
 
 // --------------------------------------------------------------- JSON-RPC ---

@@ -116,13 +116,32 @@ async function main() {
     'ledger_task_get',
     'ledger_tasks',
     'needledrop_verify',
+    'sync_shelf_match',
     'trust_verdict',
   ].sort();
-  check('tools/list exposes exactly 7 tools', JSON.stringify(names) === JSON.stringify(expected), names.join(','));
+  check('tools/list exposes exactly 8 tools', JSON.stringify(names) === JSON.stringify(expected), names.join(','));
   check(
     'every tool has name, description, inputSchema',
     (list.result.tools || []).every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object')
   );
+
+  console.log('sync shelf:');
+  const shelf = await send('tools/call', { name: 'sync_shelf_match', arguments: { moods: ['dark','hypnotic'], energy: 'high', bpm_min: 80, bpm_max: 110 } });
+  const shelfP = toolPayload(shelf.result);
+  check('sync_shelf_match: disclaimer present and denies legal clearance',
+    typeof shelfP.disclaimer === 'string' && shelfP.disclaimer.includes('NOT a legal clearance determination'),
+    JSON.stringify(shelfP.disclaimer).slice(0, 100));
+  check('sync_shelf_match: top match is trk_lp_phantasm',
+    Array.isArray(shelfP.matches) && shelfP.matches[0] && shelfP.matches[0].track_id === 'trk_lp_phantasm',
+    JSON.stringify((shelfP.matches||[])[0]||{}).slice(0, 160));
+  check('sync_shelf_match: every match amber, no terms anywhere',
+    shelfP.matches.every((m) => m.clearance_status === 'amber') && !/terms|fee|territory/i.test(JSON.stringify(shelfP.matches)),
+    JSON.stringify(shelfP.matches).slice(0, 200));
+  const shelfEmpty = await send('tools/call', { name: 'sync_shelf_match', arguments: { moods: ['hopeful','warm'], energy: 'medium', bpm_min: 90, bpm_max: 120 } });
+  const shelfEmptyP = toolPayload(shelfEmpty.result);
+  check('sync_shelf_match: no-match brief returns empty honestly',
+    shelfEmptyP.matches.length === 0 && !!shelfEmptyP.no_match_note,
+    JSON.stringify(shelfEmptyP).slice(0, 160));
 
   console.log('ledger reads:');
   const ver = await send('tools/call', { name: 'ledger_state_version', arguments: {} });
