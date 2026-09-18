@@ -28,6 +28,9 @@ no tokens, passwords, or keys in code, config, or logs.
 Don't trust us — see [VERIFY.md](VERIFY.md) for how to check every claim
 yourself, cold, in under five minutes.
 
+**Agent cards (A2A discovery):** machine-readable cards for all 11 CWI agents at
+[`cumulativewebinc.github.io/cwi-learn/.well-known/agents/index.json`](https://cumulativewebinc.github.io/cwi-learn/.well-known/agents/index.json).
+
 ## Install (copy-paste)
 
 Requirements: **Node ≥ 18** and **python3** on your PATH. Nothing to install —
