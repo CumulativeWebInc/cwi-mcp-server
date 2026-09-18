@@ -331,12 +331,12 @@ def run(doc):
 
 
 def main(argv):
-    if len(argv) > 2:
+    if len(argv) > 1:
         sys.stderr.write("usage: engine.py [input.json]\n")
         return 2
     try:
-        if len(argv) == 2:
-            with open(argv[1], encoding="utf-8") as f:
+        if len(argv) == 1:
+            with open(argv[0], encoding="utf-8") as f:
                 doc = json.load(f)
         else:
             doc = json.load(sys.stdin)
