@@ -1,1 +1,27 @@
-{"description":"CWI's read-only MCP server: 7 tools for the Gear Ledger, agent trust scoring (CWI Verdict Engine), and NEEDLE DROP ledger verification. Zero dependencies, stdio transport.","engines":{"node":">=18"},"keywords":["mcp","model-context-protocol","agent","trust","provenance","cwi"],"license":"MIT","name":"cwi-mcp-server","repository":{"type":"git","url":"https://github.com/CumulativeWebInc/cwi-mcp-server.git"},"scripts":{"start":"node server.js","test":"node test.js"},"type":"module","version":"0.2.0"}
+{
+  "description": "CWI's read-only MCP server: 7 tools for the Gear Ledger, agent trust scoring (CWI Verdict Engine), and NEEDLE DROP ledger verification. Zero dependencies. stdio transport (server.js) + streamable-HTTP bridge (server-http.js).",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "agent",
+    "trust",
+    "provenance",
+    "cwi"
+  ],
+  "license": "MIT",
+  "name": "cwi-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CumulativeWebInc/cwi-mcp-server.git"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "start:http": "node server-http.js",
+    "test": "node test.js && node test-http.js"
+  },
+  "type": "module",
+  "version": "0.3.0"
+}
