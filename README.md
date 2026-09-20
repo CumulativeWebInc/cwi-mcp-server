@@ -76,6 +76,20 @@ custom connector. Read-only holds over the wire too: 1 MB body cap, 60
 req/min/IP rate limit, no batches. `GET /` serves a human info page,
 `GET /health` a JSON health check.
 
+## Hosting (Docker-ready)
+
+`Dockerfile` (Node 20 + python3) and `render.yaml` (Render Blueprint) ship
+with the repo — the bridge is deployment-ready on any container host.
+
+- **Render (free, no card):** in Render, New → Blueprint → connect this repo.
+  The blueprint deploys the Docker service with `/health` checks. Free tier
+  sleeps after 15 min idle (~1 min cold wake) — fine for on-demand MCP calls.
+- **Any Docker host** (VPS, Zeabur, Cloud Run, …): `docker build -t cwi-mcp .`
+  then run with `-p 7860:7860`; the MCP endpoint is `https://<host>/mcp`.
+- **Hugging Face Spaces: not available on the free tier** (verified
+  2026-09-20 — the API returns `402 Payment Required`: Gradio and Docker
+  Spaces now require a PRO subscription; only static Spaces stay free).
+
 ## The 7 tools
 
 | # | Tool | Arguments | Returns |
