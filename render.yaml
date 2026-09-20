@@ -1,0 +1,12 @@
+# Render Blueprint — one-click deploy of the cwi-mcp-server HTTP bridge.
+# In Render: New + -> Blueprint -> connect the cwi-mcp-server GitHub repo.
+services:
+  - type: web
+    name: cwi-mcp-server
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: BIND
+        value: 0.0.0.0
