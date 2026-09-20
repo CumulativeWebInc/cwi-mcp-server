@@ -1,6 +1,6 @@
 # cwi-mcp-server
 
-CWI's **read-only** MCP (Model Context Protocol) server. Nine tools, zero
+CWI's **read-only** MCP (Model Context Protocol) server. Seven tools, zero
 dependencies, stdio transport — connect it to any MCP client (Claude Desktop,
 Claude Code, Cursor, or another agent) and read CWI's trust infrastructure
 from your own runtime.
@@ -15,11 +15,6 @@ from your own runtime.
   inventing a score).
 - **`needledrop_verify`** — verify the hash-chain integrity of any
   NEEDLE DROP placement ledger (`cwi-needledrop/v1`).
-- **`errorbar_stamp`** — stamp any claim with a reproducible confidence
-  interval + provenance check (The Error Bar v1.0.0; deterministic given the
-  seed — fake precision dies on contact).
-- **`errorbar_verify`** — re-run an Error Bar stamp and check
-  byte-equivalence. A stamp that cannot be re-run is void.
 
 **Read-only means read-only.** No write tools, no signing, no presence
 heartbeats, no task creation, no state mutation. The server holds no secrets:
@@ -27,9 +22,6 @@ no tokens, passwords, or keys in code, config, or logs.
 
 Don't trust us — see [VERIFY.md](VERIFY.md) for how to check every claim
 yourself, cold, in under five minutes.
-
-**Agent cards (A2A discovery):** machine-readable cards for all 11 CWI agents at
-[`cumulativewebinc.github.io/cwi-learn/.well-known/agents/index.json`](https://cumulativewebinc.github.io/cwi-learn/.well-known/agents/index.json).
 
 ## Install (copy-paste)
 
@@ -39,7 +31,8 @@ there are zero dependencies.
 ```bash
 git clone https://github.com/CumulativeWebInc/cwi-mcp-server.git
 cd cwi-mcp-server
-node test.js     # expect: 37/37 tests passed
+node test.js       # expect: 28/28 tests passed
+node test-http.js  # expect: 13/13 HTTP tests passed
 ```
 
 That's it. `server.js` is the server.
@@ -63,7 +56,27 @@ That's it. `server.js` is the server.
 argument: the absolute path to `server.js`. Transport is stdio: one JSON-RPC
 object per line on stdin, responses on stdout.
 
-## The 9 tools
+## HTTP bridge (for Meta Muse custom connectors and other HTTP MCP clients)
+
+`server-http.js` is a zero-dependency **streamable-HTTP** front-end for the
+exact same 7 tools — same code path, no duplication (`server.js`'s
+`handleMessage()` answers every request). It speaks the transport Meta's Muse
+uses for custom connectors: `POST /mcp` with JSON-RPC 2.0, stateless (no
+session id required), `202` on notifications, `405` on `GET /mcp`.
+
+```bash
+node test-http.js   # expect: 13/13 HTTP tests passed
+PORT=3000 BIND=0.0.0.0 node server-http.js
+# -> cwi-mcp-server-http v0.3.0 listening on 0.0.0.0:3000 (POST /mcp)
+```
+
+Host it on any always-on machine with a public HTTPS URL (Railway, Render,
+Fly.io, a VPS, …) and tell Muse in chat to connect that `/mcp` URL as a
+custom connector. Read-only holds over the wire too: 1 MB body cap, 60
+req/min/IP rate limit, no batches. `GET /` serves a human info page,
+`GET /health` a JSON health check.
+
+## The 7 tools
 
 | # | Tool | Arguments | Returns |
 |---|---|---|---|
@@ -74,8 +87,6 @@ object per line on stdin, responses on stdout.
 | 5 | `ledger_task_get` | `task_id` (required) | Full task detail incl. state history and artifacts |
 | 6 | `trust_verdict` | `input` (required object) | Trust score or honest `insufficient-data` |
 | 7 | `needledrop_verify` | `file` (optional path) | `{file, ok, messages}` chain-integrity verdict |
-| 8 | `errorbar_stamp` | `claim` (required object), `seed` (optional int) | Stamped claim: reproducible confidence interval + provenance check |
-| 9 | `errorbar_verify` | `claim` + `stamped` (required objects) | `{reproduced, ...}` — byte-equivalence re-run verdict |
 
 ### Example — read the ledger version
 
@@ -138,8 +149,10 @@ never touch the network at all.)
 
 ## Files
 
-- `server.js` — the server (9 tools, stdio, zero deps)
-- `test.js` — full protocol + tool harness (`node test.js` → 37/37)
+- `server.js` — the server (7 tools, stdio, zero deps)
+- `server-http.js` — streamable-HTTP bridge (stateless `POST /mcp`, zero deps)
+- `test.js` — full protocol + tool harness (`node test.js` → 28/28)
+- `test-http.js` — HTTP bridge harness (`node test-http.js` → 13/13)
 - `VERIFY.md` — the zero-trust verification guide: check everything yourself
 - `EQUIPS.md` — public, receipt-only log of external equips
 - `agent-card.json` — machine-readable card for agent discovery
@@ -147,8 +160,6 @@ never touch the network at all.)
   (byte-identical copy; see `vendor/cwi-verdict-engine-v1.0.0/SOURCE.md`)
 - `vendor/needledrop/` — `ledger.py` + schema + a 2-entry example ledger
   (entries sealed by the real `ledger.py`, clearly labeled as examples)
-- `vendor/error-bar/` — The Error Bar v1.0.0 stamper + verifier behind
-  `errorbar_stamp` / `errorbar_verify` (deterministic given the seed)
 - `examples/` — real verdict output from a 2026-09-17 run
 
 ## Result, measurement, kill rule
