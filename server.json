@@ -8,19 +8,5 @@
   "repository": {
     "url": "https://github.com/CumulativeWebInc/cwi-mcp-server",
     "source": "github"
-  },
-  "remotes": [
-    {
-      "type": "streamable-http",
-      "url": "https://{host}/mcp",
-      "variables": {
-        "host": {
-          "description": "Public hostname of your cwi-mcp-server-http deployment (self-host via the repo Dockerfile + render.yaml)",
-          "isRequired": true,
-          "isSecret": false,
-          "placeholder": "cwi-mcp-server.onrender.com"
-        }
-      }
-    }
-  ]
+  }
 }
