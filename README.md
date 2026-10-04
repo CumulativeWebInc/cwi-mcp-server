@@ -37,6 +37,8 @@ node test-http.js  # expect: 13/13 HTTP tests passed
 
 That's it. `server.js` is the server.
 
+**New here?** Start with the 10-step equip guide (every step tested): https://cumulativewebinc.github.io/cwi-learn/EQUIP-GUIDE.md
+
 ## One-click install
 
 - **[Install in Cursor](https://cursor.com/install-mcp?name=cwi&config=eyJjb21tYW5kIjoibm9kZSIsImFyZ3MiOlsiL2Fic29sdXRlL3BhdGgvdG8vY3dpLW1jcC1zZXJ2ZXIvc2VydmVyLmpzIl19)** — opens Cursor with the `cwi` MCP config pre-filled (stdio: `node /absolute/path/to/cwi-mcp-server/server.js`). Replace the path with your real checkout path.
