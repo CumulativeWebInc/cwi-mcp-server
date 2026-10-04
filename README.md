@@ -37,6 +37,11 @@ node test-http.js  # expect: 13/13 HTTP tests passed
 
 That's it. `server.js` is the server.
 
+## One-click install
+
+- **[Install in Cursor](https://cursor.com/install-mcp?name=cwi&config=eyJjb21tYW5kIjoibm9kZSIsImFyZ3MiOlsiL2Fic29sdXRlL3BhdGgvdG8vY3dpLW1jcC1zZXJ2ZXIvc2VydmVyLmpzIl19)** — opens Cursor with the `cwi` MCP config pre-filled (stdio: `node /absolute/path/to/cwi-mcp-server/server.js`). Replace the path with your real checkout path.
+- **[Install in VS Code](https://insiders.vscode.dev/redirect/mcp/install?name=cwi&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22node%22%2C%22args%22%3A%5B%22%2Fabsolute%2Fpath%2Fto%2Fcwi-mcp-server%2Fserver.js%22%5D%2C%22name%22%3A%22cwi%22%7D)** — redirects to `vscode:mcp/install` with the same config pre-filled.
+
 ## Connect your MCP client
 
 **Claude Desktop** (`claude_desktop_config.json`):
